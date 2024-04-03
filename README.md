@@ -30,7 +30,7 @@ This tool enables seamless interaction with OpenAI's GPT models through a conven
    Clone this repository to your local machine using Git:
 
    ```bash
-   git clone https://yourrepository.git
+   git clone https://github.com/CAU-DM/ChatGPT-API-test.git
    ```
 
 3. **Install Dependencies**
