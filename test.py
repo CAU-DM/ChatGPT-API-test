@@ -29,16 +29,59 @@ This ensures that diary entries are produced only when the user expressly wishes
 식사를 마친 후에는 원주의 유명한 명소들을 방문하기로 했다. 원주의 자연 경관을 즐기기 위해 가장 먼저 눈뜨리산 자연휴양림을 찾았다. 숲속을 거닐며 맑은 공기를 마시며 가족들과 함께 시간을 보냈다. 눈뜨리산 정상에서 내려다보는 풍경은 정말 아름다웠다. 사진을 찍어 추억을 남겼다.
 저녁이 되어서야 호텔로 향했다. 피로한 하루를 보낸 뒤 호텔에 도착하자마자 우리는 편안한 침대에 누워 휴식을 취했다. 오늘 하루 원주에서 보낸 시간은 정말 행복했다. 가족과 함께하는 여행은 언제나 즐거운 것 같다. 오늘의 여행은 나에게 소중한 추억이 될 것이다.'''
 """
-MODEL="gpt-4"
-encoding = tiktoken.encoding_for_model(MODEL)
-system_token = len(encoding.encode(system_prompt))
-conversation_history = [{"role": "system", "content": system_prompt}]
 
-def trim_conversation_history(history, max_tokens=4096-system_token):
-    total_tokens = sum(len(message["content"].split()) for message in history)
+def num_tokens_from_messages(messages, model="gpt-3.5-turbo-0613"):
+    """Return the number of tokens used by a list of messages."""
+    try:
+        encoding = tiktoken.encoding_for_model(model)
+    except KeyError:
+        print("Warning: model not found. Using cl100k_base encoding.")
+        encoding = tiktoken.get_encoding("cl100k_base")
+    if model in {
+        "gpt-3.5-turbo-0613",
+        "gpt-3.5-turbo-16k-0613",
+        "gpt-4-0314",
+        "gpt-4-32k-0314",
+        "gpt-4-0613",
+        "gpt-4-32k-0613",
+        }:
+        tokens_per_message = 3
+        tokens_per_name = 1
+    elif model == "gpt-3.5-turbo-0301":
+        tokens_per_message = 4  # every message follows <|start|>{role/name}\n{content}<|end|>\n
+        tokens_per_name = -1  # if there's a name, the role is omitted
+    elif "gpt-3.5-turbo" in model:
+        print("Warning: gpt-3.5-turbo may update over time. Returning num tokens assuming gpt-3.5-turbo-0613.")
+        return num_tokens_from_messages(messages, model="gpt-3.5-turbo-0613")
+    elif "gpt-4" in model:
+        print("Warning: gpt-4 may update over time. Returning num tokens assuming gpt-4-0613.")
+        return num_tokens_from_messages(messages, model="gpt-4-0613")
+    else:
+        raise NotImplementedError(
+            f"""num_tokens_from_messages() is not implemented for model {model}. See https://github.com/openai/openai-python/blob/main/chatml.md for information on how messages are converted to tokens."""
+        )
+    num_tokens = 0
+    for message in messages:
+        num_tokens += tokens_per_message
+        for key, value in message.items():
+            num_tokens += len(encoding.encode(value))
+            if key == "name":
+                num_tokens += tokens_per_name
+    num_tokens += 3  # every reply is primed with <|start|>assistant<|message|>
+    return num_tokens
+
+
+# {"gpt-3.5-turbo-0613", "gpt-3.5-turbo-16k-0613", "gpt-4-0314", "gpt-4-32k-0314", "gpt-4-0613", "gpt-4-32k-0613",}
+MODEL="gpt-4-0613"
+conversation_history = [{"role": "system", "content": system_prompt}]
+system_token = num_tokens_from_messages(conversation_history, model=MODEL)
+encoding = tiktoken.encoding_for_model(MODEL)
+
+def trim_conversation_history(history, max_tokens=8_192-system_token):
+    total_tokens = num_tokens_from_messages(history, model=MODEL)
     while total_tokens > max_tokens:
-        removed_message = history.pop(1)
-        total_tokens -= len(encoding.encode(removed_message["content"]))
+        total_tokens -= len(encoding.encode(history.pop(-1)["content"]))
+        total_tokens -= 3
     return history
 
 def create_openai_client():
